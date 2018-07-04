@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	common.SetLogger(common.ConsoleLogger{})
+	// common.SetLogger(common.ConsoleLogger{})
 }
 
 // Test flate encoding.

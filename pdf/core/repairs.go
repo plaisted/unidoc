@@ -51,7 +51,13 @@ func (parser *PdfParser) repairLocateXref() (int64, error) {
 // Update the table.
 func (parser *PdfParser) rebuildXrefTable() error {
 	newXrefs := XrefTable{}
-	for objNum, xref := range parser.xrefs {
+	// snapshot, need to rework concurrency on xrefs to R/W type locks
+	parser.xrefMut.Lock()
+	for k, v := range parser.xrefs {
+		newXrefs[k] = v
+	}
+	parser.xrefMut.Unlock()
+	for objNum, xref := range newXrefs {
 		obj, _, err := parser.lookupByNumberWrapper(objNum, false)
 		if err != nil {
 			common.Log.Debug("ERROR: Unable to look up object (%s)", err)
@@ -61,7 +67,9 @@ func (parser *PdfParser) rebuildXrefTable() error {
 				common.Log.Debug("ERROR: Failed xref rebuild repair (%s)", err)
 				return err
 			}
+			parser.xrefMut.Lock()
 			parser.xrefs = *xrefTable
+			parser.xrefMut.Unlock()
 			common.Log.Debug("Repaired xref table built")
 			return nil
 		}
@@ -72,10 +80,9 @@ func (parser *PdfParser) rebuildXrefTable() error {
 
 		xref.objectNumber = int(actObjNum)
 		xref.generation = int(actGenNum)
-		newXrefs[int(actObjNum)] = xref
+		parser.saveToXrefs(int(actObjNum), xref)
 	}
 
-	parser.xrefs = newXrefs
 	common.Log.Debug("New xref table built")
 	printXrefTable(parser.xrefs)
 	return nil
@@ -105,6 +112,8 @@ func (parser *PdfParser) repairRebuildXrefsTopDown() (*XrefTable, error) {
 	parser.repairsAttempted = true
 
 	// Go to beginning, reset reader.
+	parser.rsMut.Lock()
+	defer parser.rsMut.Unlock()
 	parser.rs.Seek(0, os.SEEK_SET)
 	parser.reader = bufio.NewReader(parser.rs)
 

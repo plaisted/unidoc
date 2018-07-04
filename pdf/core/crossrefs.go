@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -34,7 +35,8 @@ type XrefObject struct {
 	objectNumber int
 	generation   int
 	// For normal xrefs (defined by OFFSET)
-	offset int64
+	offset     int64
+	nextOffset int64
 	// For xrefs to object streams.
 	osObjNumber int
 	osObjIndex  int
@@ -52,7 +54,12 @@ type XrefTable map[int]XrefObject
 type ObjectStream struct {
 	N       int // TODO (v3): Unexport.
 	ds      []byte
-	offsets map[int]int64
+	offsets map[int]osOffsets
+}
+
+type osOffsets struct {
+	Start int64
+	End   int64
 }
 
 // ObjectStreams defines a map between object numbers (object streams only) and underlying ObjectStream information.
@@ -64,16 +71,21 @@ type ObjectStreams map[int]ObjectStream
 type ObjectCache map[int]PdfObject
 
 // Get an object from an object stream.
-func (parser *PdfParser) lookupObjectViaOS(sobjNumber int, objNum int) (PdfObject, error) {
+func (parser *PdfParser) lookupObjectBytesViaOS(sobjNumber int, objNum int) ([]byte, error) {
 	var bufReader *bytes.Reader
 	var objstm ObjectStream
 	var cached bool
 
 	objstm, cached = parser.objstms[sobjNumber]
 	if !cached {
-		soi, err := parser.LookupByNumber(sobjNumber)
+		reader, _, err := parser.lookupReaderByNumber(sobjNumber, false)
 		if err != nil {
 			common.Log.Debug("Missing object stream with number %d", sobjNumber)
+			return nil, err
+		}
+		soi, err := parseObject(reader)
+		if err != nil {
+			common.Log.Debug("Error parsing object stream with number %d", sobjNumber)
 			return nil, err
 		}
 
@@ -121,16 +133,17 @@ func (parser *PdfParser) lookupObjectViaOS(sobjNumber int, objNum int) (PdfObjec
 		defer func() { parser.SetFileOffset(bakOffset) }()
 
 		bufReader = bytes.NewReader(ds)
-		parser.reader = bufio.NewReader(bufReader)
+		reader = bufio.NewReader(bufReader)
 
 		common.Log.Trace("Parsing offset map")
 		// Load the offset map (relative to the beginning of the stream...)
-		offsets := map[int]int64{}
+		offsets := map[int]osOffsets{}
+		var lastOffset osOffsets
 		// Object list and offsets.
 		for i := 0; i < int(*N); i++ {
-			parser.skipSpaces()
+			skipSpaces(reader)
 			// Object number.
-			obj, err := parser.parseNumber()
+			obj, err := parseNumber(reader)
 			if err != nil {
 				return nil, err
 			}
@@ -139,9 +152,9 @@ func (parser *PdfParser) lookupObjectViaOS(sobjNumber int, objNum int) (PdfObjec
 				return nil, errors.New("Invalid object stream offset table")
 			}
 
-			parser.skipSpaces()
+			skipSpaces(reader)
 			// Offset.
-			obj, err = parser.parseNumber()
+			obj, err = parseNumber(reader)
 			if err != nil {
 				return nil, err
 			}
@@ -151,46 +164,57 @@ func (parser *PdfParser) lookupObjectViaOS(sobjNumber int, objNum int) (PdfObjec
 			}
 
 			common.Log.Trace("obj %d offset %d", *onum, *offset)
-			offsets[int(*onum)] = int64(*firstOffset + *offset)
+			thisOffsets := osOffsets{
+				Start: int64(*firstOffset + *offset),
+			}
+			offsets[int(*onum)] = thisOffsets
+			if lastOffset.Start != 0 {
+				lastOffset.End = thisOffsets.Start
+			}
+			lastOffset = thisOffsets
 		}
+		lastOffset.End = int64(len(ds))
 
 		objstm = ObjectStream{N: int(*N), ds: ds, offsets: offsets}
 		parser.objstms[sobjNumber] = objstm
-	} else {
-		// Temporarily change the reader object to this decoded buffer.
-		// Point back afterwards.
-		bakOffset := parser.GetFileOffset()
-		defer func() { parser.SetFileOffset(bakOffset) }()
-
-		bufReader = bytes.NewReader(objstm.ds)
-		// Temporarily change the reader object to this decoded buffer.
-		parser.reader = bufio.NewReader(bufReader)
 	}
 
-	offset := objstm.offsets[objNum]
-	common.Log.Trace("ACTUAL offset[%d] = %d", objNum, offset)
+	offsets := objstm.offsets[objNum]
+	common.Log.Trace("ACTUAL offset[%d] = %d", objNum, offsets.Start)
 
-	bufReader.Seek(offset, os.SEEK_SET)
-	parser.reader = bufio.NewReader(bufReader)
-
-	bb, _ := parser.reader.Peek(100)
+	peakEnd := 100
+	if len(objstm.ds) < peakEnd {
+		peakEnd = len(objstm.ds)
+	}
+	bb := objstm.ds[:peakEnd]
 	common.Log.Trace("OBJ peek \"%s\"", string(bb))
 
-	val, err := parser.parseObject()
-	if err != nil {
-		common.Log.Debug("ERROR Fail to read object (%s)", err)
-		return nil, err
-	}
-	if val == nil {
-		return nil, errors.New("Object cannot be null")
-	}
+	return getWrappedOSBytes(objstm.ds, offsets.Start, offsets.End, sobjNumber), nil
+}
 
-	// Make an indirect object around it.
-	io := PdfIndirectObject{}
-	io.ObjectNumber = int64(objNum)
-	io.PdfObject = val
+func getWrappedOSBytes(data []byte, start, end int64, objNo int) []byte {
+	header := fmt.Sprintf("%d %d obj\n", objNo, 0)
+	trailer := "endobj\n"
+	dataStart := len(header)
+	dataEnd := int64(dataStart) + end - start
+	if data[end-1] != '\n' {
+		trailer = "\nendobj\n"
+	}
+	result := make([]byte, end-start+int64(len(header))+int64(len(trailer)))
+	copy(result[:dataStart], header)
+	copy(result[dataStart:dataEnd], data[start:end])
+	copy(result[dataEnd:], trailer)
+	return result
+}
 
-	return &io, nil
+func getObjectNumber(obj PdfObject) (int64, int64, error) {
+	if io, isIndirect := obj.(*PdfIndirectObject); isIndirect {
+		return io.ObjectNumber, io.GenerationNumber, nil
+	}
+	if so, isStream := obj.(*PdfObjectStream); isStream {
+		return so.ObjectNumber, so.GenerationNumber, nil
+	}
+	return 0, 0, errors.New("Not an indirect/stream object")
 }
 
 // LookupByNumber looks up a PdfObject by object number.  Returns an error on failure.
@@ -220,45 +244,85 @@ func (parser *PdfParser) lookupByNumberWrapper(objNumber int, attemptRepairs boo
 	return obj, inObjStream, nil
 }
 
-func getObjectNumber(obj PdfObject) (int64, int64, error) {
-	if io, isIndirect := obj.(*PdfIndirectObject); isIndirect {
-		return io.ObjectNumber, io.GenerationNumber, nil
+func (parser *PdfParser) lookupReaderByNumber(objNumber int, attemptRepairs bool) (*bufio.Reader, bool, error) {
+	data, isObjStream, err := parser.lookupBytesByNumber(objNumber, attemptRepairs)
+	if err != nil {
+		return nil, isObjStream, err
 	}
-	if so, isStream := obj.(*PdfObjectStream); isStream {
-		return so.ObjectNumber, so.GenerationNumber, nil
+	if data == nil {
+		return nil, false, nil
 	}
-	return 0, 0, errors.New("Not an indirect/stream object")
+	return bufio.NewReader(bytes.NewReader(data)), isObjStream, nil
 }
 
-// LookupByNumber
-// Repair signals whether to repair if broken.
-func (parser *PdfParser) lookupByNumber(objNumber int, attemptRepairs bool) (PdfObject, bool, error) {
-	obj, ok := parser.ObjCache[objNumber]
-	if ok {
-		common.Log.Trace("Returning cached object %d", objNumber)
-		return obj, false, nil
-	}
-
-	xref, ok := parser.xrefs[objNumber]
+func (parser *PdfParser) lookupBytesByNumber(objNumber int, attemptRepairs bool) ([]byte, bool, error) {
+	xref, ok := parser.loadFromXrefs(objNumber)
 	if !ok {
 		// An indirect reference to an undefined object shall not be
 		// considered an error by a conforming reader; it shall be
 		// treated as a reference to the null object.
 		common.Log.Trace("Unable to locate object in xrefs! - Returning null object")
-		var nullObj PdfObjectNull
-		return &nullObj, false, nil
+		return nil, false, nil
 	}
-
 	common.Log.Trace("Lookup obj number %d", objNumber)
 	if xref.xtype == XREF_TABLE_ENTRY {
 		common.Log.Trace("xrefobj obj num %d", xref.objectNumber)
 		common.Log.Trace("xrefobj gen %d", xref.generation)
 		common.Log.Trace("xrefobj offset %d", xref.offset)
 
+		parser.rsMut.Lock()
 		parser.rs.Seek(xref.offset, os.SEEK_SET)
-		parser.reader = bufio.NewReader(parser.rs)
+		reader := bufio.NewReader(parser.rs)
+		objBytes := make([]byte, xref.nextOffset-xref.offset)
+		_, err := reader.Read(objBytes)
+		parser.rsMut.Unlock()
+		return objBytes, false, err
+	} else if xref.xtype == XREF_OBJECT_STREAM {
+		common.Log.Trace("xref from object stream!")
+		common.Log.Trace(">Load via OS!")
+		common.Log.Trace("Object stream available in object %d/%d", xref.osObjNumber, xref.osObjIndex)
 
-		obj, err := parser.ParseIndirectObject()
+		if xref.osObjNumber == objNumber {
+			common.Log.Debug("ERROR Circular reference!?!")
+			return nil, true, errors.New("Xref circular reference")
+		}
+		_, exists := parser.loadFromXrefs(xref.osObjNumber)
+		if exists {
+			objBytes, err := parser.lookupObjectBytesViaOS(xref.osObjNumber, objNumber) //xref.osObjIndex)
+			if err != nil {
+				common.Log.Debug("ERROR Returning ERR (%s)", err)
+				return nil, true, err
+			}
+			common.Log.Trace("<Loaded via OS")
+			return objBytes, true, nil
+		} else {
+			common.Log.Debug("?? Belongs to a non-cross referenced object ...!")
+			return nil, true, errors.New("OS belongs to a non cross referenced object")
+		}
+	}
+	return nil, false, errors.New("Unknown xref type")
+}
+
+// LookupByNumber
+// Repair signals whether to repair if broken.
+func (parser *PdfParser) lookupByNumber(objNumber int, attemptRepairs bool) (PdfObject, bool, error) {
+	obj, cached := parser.fromObjCache(objNumber)
+	if cached {
+		return obj, false, nil
+	}
+
+	reader, isObjStream, err := parser.lookupReaderByNumber(objNumber, true)
+	if err != nil {
+		return nil, isObjStream, err
+	}
+
+	if reader == nil {
+		io := PdfIndirectObject{}
+		io.ObjectNumber = int64(objNumber)
+		io.PdfObject = &PdfObjectNull{}
+		return &io, false, nil
+	} else {
+		obj, err := ParseIndirectObject(reader)
 		if err != nil {
 			common.Log.Debug("ERROR Failed reading xref (%s)", err)
 			// Offset pointing to a non-object.  Try to repair the file.
@@ -267,12 +331,15 @@ func (parser *PdfParser) lookupByNumber(objNumber int, attemptRepairs bool) (Pdf
 				xrefTable, err := parser.repairRebuildXrefsTopDown()
 				if err != nil {
 					common.Log.Debug("ERROR Failed repair (%s)", err)
-					return nil, false, err
+					return nil, isObjStream, err
 				}
+				parser.xrefMut.Lock()
 				parser.xrefs = *xrefTable
+				parser.addXrefNextOffsets()
+				parser.xrefMut.Unlock()
 				return parser.lookupByNumber(objNumber, false)
 			}
-			return nil, false, err
+			return nil, isObjStream, err
 		}
 
 		if attemptRepairs {
@@ -284,48 +351,86 @@ func (parser *PdfParser) lookupByNumber(objNumber int, attemptRepairs bool) (Pdf
 				common.Log.Debug("Invalid xrefs: Rebuilding")
 				err := parser.rebuildXrefTable()
 				if err != nil {
-					return nil, false, err
+					return nil, isObjStream, err
 				}
 				// Empty the cache.
-				parser.ObjCache = ObjectCache{}
+				parser.objCacheMut.Lock()
+				parser.objCache = ObjectCache{}
+				parser.objCacheMut.Unlock()
 				// Try looking up again and return.
-				return parser.lookupByNumberWrapper(objNumber, false)
+				return parser.lookupByNumber(objNumber, false)
 			}
 		}
 
-		common.Log.Trace("Returning obj")
-		parser.ObjCache[objNumber] = obj
-		return obj, false, nil
-	} else if xref.xtype == XREF_OBJECT_STREAM {
-		common.Log.Trace("xref from object stream!")
-		common.Log.Trace(">Load via OS!")
-		common.Log.Trace("Object stream available in object %d/%d", xref.osObjNumber, xref.osObjIndex)
-
-		if xref.osObjNumber == objNumber {
-			common.Log.Debug("ERROR Circular reference!?!")
-			return nil, true, errors.New("Xref circular reference")
-		}
-		_, exists := parser.xrefs[xref.osObjNumber]
-		if exists {
-			optr, err := parser.lookupObjectViaOS(xref.osObjNumber, objNumber) //xref.osObjIndex)
+		if objStm, is := obj.(*PdfObjectStream); is {
+			err = parser.validateObjectStreamLength(objStm)
 			if err != nil {
-				common.Log.Debug("ERROR Returning ERR (%s)", err)
-				return nil, true, err
+				return obj, isObjStream, err
 			}
-			common.Log.Trace("<Loaded via OS")
-			parser.ObjCache[objNumber] = optr
-			if parser.crypter != nil {
-				// Mark as decrypted (inside object stream) for caching.
-				// and avoid decrypting decrypted object.
-				parser.crypter.DecryptedObjects[optr] = true
-			}
-			return optr, true, nil
-		} else {
-			common.Log.Debug("?? Belongs to a non-cross referenced object ...!")
-			return nil, true, errors.New("OS belongs to a non cross referenced object")
 		}
+
+		parser.toObjCache(objNumber, obj)
+		return obj, false, nil
 	}
-	return nil, false, errors.New("Unknown xref type")
+}
+
+func (parser *PdfParser) validateObjectStreamLength(obj *PdfObjectStream) error {
+	// Special stream length tracing function used to avoid endless recursive looping.
+	slo, err := parser.traceStreamLength(obj.PdfObjectDictionary.Get("Length"))
+	if err != nil {
+		common.Log.Debug("Fail to trace stream length: %v", err)
+		return err
+	}
+	common.Log.Trace("Stream length? %s", slo)
+
+	pstreamLength, ok := slo.(*PdfObjectInteger)
+	if !ok {
+		return errors.New("Stream length needs to be an integer")
+	}
+	streamLength := *pstreamLength
+	if streamLength < 0 {
+		return errors.New("Stream needs to be longer than 0")
+	}
+
+	if int(streamLength) == len(obj.Stream) {
+		return nil
+	}
+
+	// look into current unidoc corrections below and see if we need to follow those
+	// should be covered by way we are using object offsets from the start
+	obj.PdfObjectDictionary.Set("Length", MakeInteger(int64(len(obj.Stream))))
+
+	return nil
+	//	// Validate the stream length based on the cross references.
+	//	// Find next object with closest offset to current object and calculate
+	//	// the expected stream length based on that.
+	//	xref, found := parser.loadFromXrefs(int(obj.ObjectNumber))
+	//	if !found {
+	//		return errors.New("Bad xref when attempting stream length verification")
+	//	}
+	//
+	//	streamStartOffset := parser.GetFileOffset()
+	//	nextObjectOffset := parser.xrefNextObjectOffset(streamStartOffset)
+	//	if streamStartOffset+int64(streamLength) > nextObjectOffset && nextObjectOffset > streamStartOffset {
+	//		common.Log.Debug("Expected ending at %d", streamStartOffset+int64(streamLength))
+	//		common.Log.Debug("Next object starting at %d", nextObjectOffset)
+	//		// endstream + "\n" endobj + "\n" (17)
+	//		newLength := nextObjectOffset - streamStartOffset - 17
+	//		if newLength < 0 {
+	//			return errors.New("Invalid stream length, going past boundaries")
+	//		}
+	//
+	//		common.Log.Debug("Attempting a length correction to %d...", newLength)
+	//		streamLength = PdfObjectInteger(newLength)
+	//		obj.PdfObjectDictionary.Set("Length", MakeInteger(newLength))
+	//	}
+	//
+	//	// Make sure is less than actual file size.
+	//	if int64(streamLength) > parser.fileSize {
+	//		common.Log.Debug("ERROR: Stream length cannot be larger than file size")
+	//		return errors.New("Invalid stream length, larger than file size")
+	//	}
+	//	return nil
 }
 
 // LookupByReference looks up a PdfObject by a reference.

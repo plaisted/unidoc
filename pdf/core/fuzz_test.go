@@ -2,12 +2,10 @@ package core
 
 import (
 	"testing"
-
-	"github.com/unidoc/unidoc/common"
 )
 
 func init() {
-	common.SetLogger(common.NewConsoleLogger(common.LogLevelTrace))
+	// common.SetLogger(common.NewConsoleLogger(common.LogLevelTrace))
 }
 
 // Fuzz tests based on findings with go-fuzz.
@@ -53,8 +51,8 @@ endstream
 	parser := PdfParser{}
 	parser.xrefs = make(XrefTable)
 	parser.objstms = make(ObjectStreams)
-	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
 	parser.streamLengthReferenceLookupInProgress = map[int64]bool{}
+	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
 
 	// Point to the start of the stream (where obj 13 starts).
 	parser.xrefs[13] = XrefObject{
@@ -64,9 +62,18 @@ endstream
 		0,
 		0,
 		0,
+		0,
 	}
 
-	_, err := parser.ParseIndirectObject()
+	obj, err := ParseIndirectObject(parser.reader)
+	if err != nil {
+		t.Errorf("Parsing failed for stream: %s", err)
+	}
+	stream, ok := obj.(*PdfObjectStream)
+	if !ok {
+		t.Errorf("Parsing produced not stream object")
+	}
+	err = parser.validateObjectStreamLength(stream)
 	if err == nil {
 		t.Errorf("Should fail with an error")
 	}
@@ -74,7 +81,7 @@ endstream
 
 // Slightly more complex case where the reference number is incorrect, but still points to the same object.
 func TestFuzzSelfReference2(t *testing.T) {
-	common.SetLogger(common.NewConsoleLogger(common.LogLevelTrace))
+	//common.SetLogger(common.NewConsoleLogger(common.LogLevelTrace))
 
 	rawText := `13 0 obj
 << /Length 12 0 R >>
@@ -86,8 +93,8 @@ endstream
 	parser := PdfParser{}
 	parser.xrefs = make(XrefTable)
 	parser.objstms = make(ObjectStreams)
-	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
 	parser.streamLengthReferenceLookupInProgress = map[int64]bool{}
+	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
 
 	// Point to the start of the stream (where obj 13 starts).
 	// NOTE: using incorrect object number here:
@@ -98,9 +105,18 @@ endstream
 		0,
 		0,
 		0,
+		0,
 	}
 
-	_, err := parser.ParseIndirectObject()
+	obj, err := ParseIndirectObject(parser.reader)
+	if err != nil {
+		t.Errorf("Parsing failed for stream: %s", err)
+	}
+	stream, ok := obj.(*PdfObjectStream)
+	if !ok {
+		t.Errorf("Parsing produced not stream object")
+	}
+	err = parser.validateObjectStreamLength(stream)
 	if err == nil {
 		t.Errorf("Should fail with an error")
 	}

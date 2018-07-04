@@ -13,7 +13,7 @@ import (
 
 func init() {
 	//common.SetLogger(common.NewConsoleLogger(common.LogLevelDebug))
-	common.SetLogger(common.NewConsoleLogger(common.LogLevelTrace))
+	// common.SetLogger(common.NewConsoleLogger(common.LogLevelTrace))
 }
 
 // cmap1Data represents a basic CMap.

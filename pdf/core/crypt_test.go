@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	common.SetLogger(common.ConsoleLogger{})
+	// common.SetLogger(common.ConsoleLogger{})
 }
 
 func TestPadding(t *testing.T) {
@@ -182,7 +182,7 @@ func TestDecryption1(t *testing.T) {
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
 	parser.crypter = &crypter
 
-	obj, err := parser.ParseIndirectObject()
+	obj, err := ParseIndirectObject(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing object")
 		return

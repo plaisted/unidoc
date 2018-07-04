@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	common.SetLogger(common.ConsoleLogger{})
+	// common.SetLogger(common.ConsoleLogger{})
 }
 
 func makeReaderForText(txt string) (*bytes.Reader, *bufio.Reader, int64) {
@@ -36,7 +36,7 @@ func makeParserForText(txt string) *PdfParser {
 func BenchmarkSkipSpaces(b *testing.B) {
 	parser := makeParserForText("       \t\t    \tABC")
 	for n := 0; n < b.N; n++ {
-		parser.skipSpaces()
+		skipSpaces(parser.reader)
 		parser.SetFileOffset(0)
 	}
 }
@@ -62,7 +62,7 @@ func BenchmarkNameParsing(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		for str, name := range namePairs {
 			parser := makeParserForText(str)
-			o, err := parser.parseName()
+			o, err := parseName(parser.reader)
 			if err != nil && err != io.EOF {
 				b.Errorf("Unable to parse name string, error: %s", err)
 			}
@@ -76,7 +76,7 @@ func BenchmarkNameParsing(b *testing.B) {
 func TestNameParsing(t *testing.T) {
 	for str, name := range namePairs {
 		parser := makeParserForText(str)
-		o, err := parser.parseName()
+		o, err := parseName(parser.reader)
 		if err != nil && err != io.EOF {
 			t.Errorf("Unable to parse name string, error: %s", err)
 		}
@@ -87,7 +87,7 @@ func TestNameParsing(t *testing.T) {
 
 	// Should fail (require starting with '/')
 	parser := makeParserForText(" /Name")
-	_, err := parser.parseName()
+	_, err := parseName(parser.reader)
 	if err == nil || err == io.EOF {
 		t.Errorf("Should be invalid name")
 	}
@@ -102,7 +102,7 @@ func BenchmarkStringParsing(b *testing.B) {
 	entry := "(Strings may contain balanced parenthesis () and\nspecial characters (*!&}^% and so on).)"
 	parser := makeParserForText(entry)
 	for n := 0; n < b.N; n++ {
-		_, err := parser.parseString()
+		_, err := parseString(parser.reader)
 		if err != nil && err != io.EOF {
 			b.Errorf("Unable to parse string, error: %s", err)
 		}
@@ -128,7 +128,7 @@ var stringPairs = map[string]string{
 func TestStringParsing(t *testing.T) {
 	for raw, expected := range stringPairs {
 		parser := makeParserForText(raw)
-		o, err := parser.parseString()
+		o, err := parseString(parser.reader)
 		if err != nil && err != io.EOF {
 			t.Errorf("Unable to parse string, error: %s", err)
 		}
@@ -143,7 +143,7 @@ func TestReadTextLine(t *testing.T) {
 	// if we rewind back len(str) bytes after reading string str we should arrive at beginning of str
 	rawText := "abc\xb0cde"
 	parser := makeParserForText(rawText)
-	s, err := parser.readTextLine()
+	s, err := readTextLine(parser.reader)
 	if err != nil && err != io.EOF {
 		t.Errorf("Unable to parse string, error: %s", err)
 	}
@@ -160,7 +160,7 @@ func TestBinStringParsing(t *testing.T) {
 
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText1)
-	o, err := parser.parseString()
+	o, err := parseString(parser.reader)
 	if err != nil && err != io.EOF {
 		t.Errorf("Unable to parse string, error: %s", err)
 	}
@@ -175,7 +175,7 @@ func TestStringParsing2(t *testing.T) {
 
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	list, err := parser.parseArray()
+	list, err := parseArray(parser.reader)
 	if err != nil {
 		t.Errorf("Failed to parse string list (%s)", err)
 		return
@@ -195,7 +195,7 @@ func TestBoolParsing(t *testing.T) {
 	for key, expected := range testEntries {
 		parser := PdfParser{}
 		parser.rs, parser.reader, parser.fileSize = makeReaderForText(key)
-		val, err := parser.parseBool()
+		val, err := parseBool(parser.reader)
 		if err != nil {
 			t.Errorf("Error parsing bool: %s", err)
 			return
@@ -213,7 +213,7 @@ func BenchmarkNumbericParsing(b *testing.B) {
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(txt1)
 
 	for n := 0; n < b.N; n++ {
-		_, err := parser.parseArray()
+		_, err := parseArray(parser.reader)
 		if err != nil {
 			b.Errorf("Error parsing array")
 			return
@@ -227,7 +227,7 @@ func TestNumericParsing1(t *testing.T) {
 	txt1 := "[34.5 -3.62 1 +123.6 4. -.002 0.0]"
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(txt1)
-	list, err := parser.parseArray()
+	list, err := parseArray(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing array")
 		return
@@ -273,7 +273,7 @@ func TestNumericParsing2(t *testing.T) {
 	txt1 := "[+4.-.002]" // 4.0 and -0.002
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(txt1)
-	list, err := parser.parseArray()
+	list, err := parseArray(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing array")
 		return
@@ -306,7 +306,7 @@ func TestNumericParsing3(t *testing.T) {
 	txt1 := "[+4.-.002+3e-2-2e0]" // 4.0, -0.002, 1e-2, -2.0
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(txt1)
-	list, err := parser.parseArray()
+	list, err := parseArray(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing array (%s)", err)
 		return
@@ -342,7 +342,7 @@ func BenchmarkHexStringParsing(b *testing.B) {
 	}
 	parser := makeParserForText("<" + hex.EncodeToString(ref.Bytes()) + ">")
 	for n := 0; n < b.N; n++ {
-		hs, err := parser.parseHexString()
+		hs, err := parseHexString(parser.reader)
 		if err != nil {
 			b.Errorf("Error parsing hex string: %s", err.Error())
 			return
@@ -367,7 +367,7 @@ func TestDictParsing1(t *testing.T) {
 	txt1 := "<<\n\t/Name /Game /key/val/data\t[0 1 2 3.14 5]\t\n\n>>"
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(txt1)
-	dict, err := parser.ParseDict()
+	dict, err := ParseDict(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing dict")
 	}
@@ -411,7 +411,7 @@ func TestDictParsing2(t *testing.T) {
 
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	dict, err := parser.ParseDict()
+	dict, err := ParseDict(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing dict")
 	}
@@ -449,7 +449,7 @@ func TestDictParsing3(t *testing.T) {
 
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	dict, err := parser.ParseDict()
+	dict, err := ParseDict(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing dict")
 	}
@@ -527,7 +527,7 @@ endobj
 	parser := PdfParser{}
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
 
-	obj, err := parser.ParseIndirectObject()
+	obj, err := ParseIndirectObject(parser.reader)
 	if err != nil {
 		t.Errorf("Failed to parse indirect obj (%s)", err)
 		return
@@ -601,7 +601,7 @@ func TestObjectParse(t *testing.T) {
 	// Invalid object type.
 	rawText := " \t9 0 false"
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	obj, err := parser.parseObject()
+	obj, err := parseObject(parser.reader)
 	if err != nil {
 		t.Error("Should ignore tab/space")
 		return
@@ -610,7 +610,7 @@ func TestObjectParse(t *testing.T) {
 	// Integer
 	rawText = "9 0 false"
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	obj, err = parser.parseObject()
+	obj, err = parseObject(parser.reader)
 
 	if err != nil {
 		t.Errorf("Error parsing object")
@@ -629,7 +629,7 @@ func TestObjectParse(t *testing.T) {
 	// Reference
 	rawText = "9 0 R false"
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	obj, err = parser.parseObject()
+	obj, err = parseObject(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing object")
 		return
@@ -647,7 +647,7 @@ func TestObjectParse(t *testing.T) {
 	// Reference
 	rawText = "909 0 R false"
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	obj, err = parser.parseObject()
+	obj, err = parseObject(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing object")
 		return
@@ -665,7 +665,7 @@ func TestObjectParse(t *testing.T) {
 	// Bool
 	rawText = "false 9 0 R"
 	parser.rs, parser.reader, parser.fileSize = makeReaderForText(rawText)
-	obj, err = parser.parseObject()
+	obj, err = parseObject(parser.reader)
 	if err != nil {
 		t.Errorf("Error parsing object")
 		return

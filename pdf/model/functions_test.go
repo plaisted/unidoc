@@ -15,7 +15,7 @@ import (
 
 func init() {
 	//common.SetLogger(common.ConsoleLogger{})
-	common.SetLogger(common.DummyLogger{})
+	// common.SetLogger(common.DummyLogger{})
 }
 
 type Type4TestCase struct {

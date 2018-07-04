@@ -55,6 +55,16 @@ type PdfObjectReference struct {
 	GenerationNumber int64
 }
 
+type PdfLazyObjectReference struct {
+	ObjectNumber     int64
+	GenerationNumber int64
+	parser           *PdfParser
+}
+
+func (or *PdfLazyObjectReference) ResolveObject() (PdfObject, error) {
+	return or.parser.LookupByNumber(int(or.ObjectNumber))
+}
+
 // PdfIndirectObject represents the primitive PDF indirect object.
 type PdfIndirectObject struct {
 	PdfObjectReference
