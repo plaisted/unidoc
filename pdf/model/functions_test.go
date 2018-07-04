@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	//common.SetLogger(common.ConsoleLogger{})
+	common.SetLogger(common.ConsoleLogger{})
 	// common.SetLogger(common.DummyLogger{})
 }
 
@@ -51,7 +51,7 @@ endobj
 
 	parser := NewParserFromString(rawText)
 
-	obj, err := parser.ParseIndirectObject()
+	obj, err := ParseIndirectObjectHelper(parser)
 	if err != nil {
 		t.Errorf("Failed to parse indirect obj (%s)", err)
 		return

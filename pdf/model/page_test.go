@@ -225,7 +225,7 @@ endobj
 	//parser.reader = makeReaderForText(rawText)
 	parser := NewParserFromString(rawText)
 
-	obj, err := parser.ParseIndirectObject()
+	obj, err := ParseIndirectObjectHelper(parser)
 	if err != nil {
 		t.Errorf("Failed to parse indirect obj (%s)", err)
 		return
@@ -270,7 +270,7 @@ func TestRect(t *testing.T) {
 	//parser.reader = makeReaderForText(rawText)
 	parser := NewParserFromString(rawText)
 
-	dict, err := parser.ParseDict()
+	dict, err := ParseDictHelper(parser)
 	if err != nil {
 		t.Errorf("Failed to parse dict obj (%s)", err)
 		return

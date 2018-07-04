@@ -522,6 +522,10 @@ func parseReference(refStr string) (PdfObjectReference, error) {
 	return objref, nil
 }
 
+func ParseDictHelper(parser *PdfParser) (*PdfObjectDictionary, error) {
+	return ParseDict(parser.reader)
+}
+
 // Reads and parses a PDF dictionary object enclosed with '<<' and '>>'
 // TODO: Unexport (v3).
 func ParseDict(reader *bufio.Reader) (*PdfObjectDictionary, error) {
@@ -591,6 +595,10 @@ func ParseDict(reader *bufio.Reader) (*PdfObjectDictionary, error) {
 	common.Log.Trace("returning PDF Dict!")
 
 	return dict, nil
+}
+
+func ParseIndirectObjectHelper(parser *PdfParser) (PdfObject, error) {
+	return ParseIndirectObject(parser.reader)
 }
 
 // Parse an indirect object from the input stream. Can also be an object stream.

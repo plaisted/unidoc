@@ -598,18 +598,20 @@ func (this *PdfReader) GetNumPages() (int, error) {
 
 // Resolves a reference, returning the object and indicates whether or not
 // it was cached.
-func (this *PdfReader) resolveReference(ref *PdfObjectReference) (PdfObject, bool, error) {
-	cachedObj, isCached := this.parser.ObjCache[int(ref.ObjectNumber)]
-	if !isCached {
-		common.Log.Trace("Reader Lookup ref: %s", ref)
-		obj, err := this.parser.LookupByReference(*ref)
-		if err != nil {
-			return nil, false, err
-		}
-		this.parser.ObjCache[int(ref.ObjectNumber)] = obj
-		return obj, false, nil
-	}
-	return cachedObj, true, nil
+func (this *PdfReader) resolveReference(ref *PdfObjectReference) (PdfObject, error) {
+	return this.parser.LookupByReference(*ref)
+
+	// cachedObj, isCached := this.parser.ObjCache[int(ref.ObjectNumber)]
+	// if !isCached {
+	// 	common.Log.Trace("Reader Lookup ref: %s", ref)
+	// 	obj, err := this.parser.LookupByReference(*ref)
+	// 	if err != nil {
+	// 		return nil, false, err
+	// 	}
+	// 	this.parser.ObjCache[int(ref.ObjectNumber)] = obj
+	// 	return obj, false, nil
+	// }
+	// return cachedObj, true, nil
 }
 
 /*
@@ -643,7 +645,7 @@ func (this *PdfReader) traverseObjectData(o PdfObject) error {
 		for _, name := range dict.Keys() {
 			v := dict.Get(name)
 			if ref, isRef := v.(*PdfObjectReference); isRef {
-				resolvedObj, _, err := this.resolveReference(ref)
+				resolvedObj, err := this.resolveReference(ref)
 				if err != nil {
 					return err
 				}
@@ -666,7 +668,7 @@ func (this *PdfReader) traverseObjectData(o PdfObject) error {
 		common.Log.Trace("- array: %s", arr)
 		for idx, v := range *arr {
 			if ref, isRef := v.(*PdfObjectReference); isRef {
-				resolvedObj, _, err := this.resolveReference(ref)
+				resolvedObj, err := this.resolveReference(ref)
 				if err != nil {
 					return err
 				}
