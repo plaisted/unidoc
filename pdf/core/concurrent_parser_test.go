@@ -50,7 +50,7 @@ func BenchmarkParallelLoad8(b *testing.B) { benchmarkParallelLoad(8, b) }
 func benchmarkParallelLoad(workers int, b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		//f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
-		f, err := os.Open("c:\\test\\scenarios\\690025_stream.pdf")
+		f, err := os.Open("c:\\test\\scenarios\\Ticket.pdf")
 		if err != nil {
 			b.Error(err)
 		}

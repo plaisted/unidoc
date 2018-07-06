@@ -38,3 +38,16 @@ func (parser *PdfParser) saveToXrefs(id int, obj XrefObject) {
 	parser.xrefs[id] = obj
 	parser.xrefMut.Unlock()
 }
+
+func (parser *PdfParser) loadFromStreamsInProgress(id int64) (bool, bool) {
+	parser.xrefMut.Lock()
+	obj, ok := parser.streamLengthReferenceLookupInProgress[id]
+	parser.xrefMut.Unlock()
+	return obj, ok
+}
+
+func (parser *PdfParser) saveToStreamsInProgressXrefs(id int64, val bool) {
+	parser.xrefMut.Lock()
+	parser.streamLengthReferenceLookupInProgress[id] = val
+	parser.xrefMut.Unlock()
+}

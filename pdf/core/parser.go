@@ -788,13 +788,13 @@ func (parser *PdfParser) validateStreamLength(obj PdfObject) error {
 func (parser *PdfParser) traceStreamLength(lengthObj PdfObject) (PdfObject, error) {
 	lengthRef, isRef := lengthObj.(*PdfObjectReference)
 	if isRef {
-		lookupInProgress, has := parser.streamLengthReferenceLookupInProgress[lengthRef.ObjectNumber]
+		lookupInProgress, has := parser.loadFromStreamsInProgress(lengthRef.ObjectNumber)
 		if has && lookupInProgress {
 			common.Log.Debug("Stream Length reference unresolved (illegal)")
 			return nil, errors.New("Illegal recursive loop")
 		}
 		// Mark lookup as in progress.
-		parser.streamLengthReferenceLookupInProgress[lengthRef.ObjectNumber] = true
+		parser.saveToStreamsInProgressXrefs(lengthRef.ObjectNumber, true)
 	}
 
 	slo, err := parser.Trace(lengthObj)
@@ -805,7 +805,7 @@ func (parser *PdfParser) traceStreamLength(lengthObj PdfObject) (PdfObject, erro
 
 	if isRef {
 		// Mark as completed lookup
-		parser.streamLengthReferenceLookupInProgress[lengthRef.ObjectNumber] = false
+		parser.saveToStreamsInProgressXrefs(lengthRef.ObjectNumber, false)
 	}
 
 	return slo, nil
