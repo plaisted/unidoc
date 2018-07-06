@@ -49,7 +49,8 @@ func BenchmarkParallelLoad4(b *testing.B) { benchmarkParallelLoad(4, b) }
 func BenchmarkParallelLoad8(b *testing.B) { benchmarkParallelLoad(8, b) }
 func benchmarkParallelLoad(workers int, b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
+		//f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
+		f, err := os.Open("c:\\test\\scenarios\\690025_stream.pdf")
 		if err != nil {
 			b.Error(err)
 		}
@@ -84,7 +85,8 @@ func benchmarkParallelLoad(workers int, b *testing.B) {
 
 func BenchmarkStandard(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
+		//f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
+		f, err := os.Open("c:\\test\\scenarios\\690025_stream.pdf")
 		if err != nil {
 			b.Error(err)
 		}
@@ -118,7 +120,8 @@ func BenchmarkStandard(b *testing.B) {
 
 func BenchmarkStandardChan(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
+		// f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
+		f, err := os.Open("c:\\test\\scenarios\\690025_stream.pdf")
 		if err != nil {
 			b.Error(err)
 		}

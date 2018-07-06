@@ -79,12 +79,13 @@ func (parser *PdfParser) GetTrailer() *PdfObjectDictionary {
 // Parse the pdf version from the beginning of the file.
 // Returns the major and minor parts of the version.
 // E.g. for "PDF-1.7" would return 1 and 7.
-// NOT THREAD SAFE
 func (parser *PdfParser) parsePdfVersion() (int, int, error) {
+	parser.rsMut.Lock()
 	parser.rs.Seek(0, os.SEEK_SET)
 	var offset int64 = 20
 	b := make([]byte, offset)
 	parser.rs.Read(b)
+	parser.rsMut.Unlock()
 
 	result1 := rePdfVersion.FindStringSubmatch(string(b))
 	if len(result1) < 3 {
@@ -226,6 +227,7 @@ func (parser *PdfParser) parseXrefTable() (*PdfObjectDictionary, error) {
 // Also load the dictionary information (trailer dictionary).
 // NOT THREAD SAFE
 func (parser *PdfParser) parseXrefStream(xstm *PdfObjectInteger) (*PdfObjectDictionary, error) {
+	// TS: parser.rsMut.Lock()
 	if xstm != nil {
 		common.Log.Trace("XRefStm xref table object at %d", xstm)
 		parser.rs.Seek(int64(*xstm), os.SEEK_SET)
@@ -233,6 +235,7 @@ func (parser *PdfParser) parseXrefStream(xstm *PdfObjectInteger) (*PdfObjectDict
 	}
 
 	xrefObj, err := ParseIndirectObject(parser.reader)
+	// TS: parser.rsMut.Unlock()
 	if err != nil {
 		common.Log.Debug("ERROR: Failed to read xref object")
 		return nil, errors.New("Failed to read xref object")
@@ -513,7 +516,7 @@ func (parser *PdfParser) parseXref() (*PdfObjectDictionary, error) {
 // Look for EOF marker and seek to its beginning.
 // Define an offset position from the end of the file.
 // NOT THREAD SAFE
-func (parser *PdfParser) seekToEOFMarker(fSize int64) error {
+func seekToEOFMarker(rs io.ReadSeeker, fSize int64) error {
 	// Define the starting point (from the end of the file) to search from.
 	var offset int64 = 0
 
@@ -526,21 +529,21 @@ func (parser *PdfParser) seekToEOFMarker(fSize int64) error {
 		}
 
 		// Move back enough (as we need to read forward).
-		_, err := parser.rs.Seek(-offset-buflen, io.SeekEnd)
+		_, err := rs.Seek(-offset-buflen, io.SeekEnd)
 		if err != nil {
 			return err
 		}
 
 		// Read the data.
 		b1 := make([]byte, buflen)
-		parser.rs.Read(b1)
+		rs.Read(b1)
 		common.Log.Trace("Looking for EOF marker: \"%s\"", string(b1))
 		ind := reEOF.FindAllStringIndex(string(b1), -1)
 		if ind != nil {
 			// Found it.
 			lastInd := ind[len(ind)-1]
 			common.Log.Trace("Ind: % d", ind)
-			parser.rs.Seek(-offset-buflen+int64(lastInd[0]), io.SeekEnd)
+			rs.Seek(-offset-buflen+int64(lastInd[0]), io.SeekEnd)
 			return nil
 		} else {
 			common.Log.Debug("Warning: EOF marker not found! - continue seeking")
@@ -574,6 +577,11 @@ func (parser *PdfParser) seekToEOFMarker(fSize int64) error {
 //
 // NOT THREAD SAFE
 func (parser *PdfParser) loadXrefs() (*PdfObjectDictionary, error) {
+	// TS: parser.xrefMut.Lock()
+	// TS: defer parser.xrefMut.Unlock()
+	// TS: parser.rsMut.Lock()
+	// TS: defer parser.rsMut.Unlock()
+
 	parser.xrefs = make(XrefTable)
 	parser.objstms = make(map[int]ObjectStream)
 
@@ -586,7 +594,7 @@ func (parser *PdfParser) loadXrefs() (*PdfObjectDictionary, error) {
 	parser.fileSize = fSize
 
 	// Seek the EOF marker.
-	err = parser.seekToEOFMarker(fSize)
+	err = seekToEOFMarker(parser.rs, fSize)
 	if err != nil {
 		common.Log.Debug("Failed seek to eof marker: %v", err)
 		return nil, err
@@ -631,7 +639,7 @@ func (parser *PdfParser) loadXrefs() (*PdfObjectDictionary, error) {
 	if offsetXref > fSize {
 		common.Log.Debug("ERROR: Xref offset outside of file")
 		common.Log.Debug("Attempting repair")
-		offsetXref, err = parser.repairLocateXref()
+		offsetXref, err = repairLocateXref(parser.rs)
 		if err != nil {
 			common.Log.Debug("ERROR: Repair attempt failed (%s)")
 			return nil, err

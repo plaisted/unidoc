@@ -24,16 +24,16 @@ var repairReXrefTable = regexp.MustCompile(`[\r\n]\s*(xref)\s*[\r\n]`)
 
 // Locates a standard Xref table by looking for the "xref" entry.
 // Xref object stream not supported.
-func (parser *PdfParser) repairLocateXref() (int64, error) {
+func repairLocateXref(rs io.ReadSeeker) (int64, error) {
 	readBuf := int64(1000)
-	parser.rs.Seek(-readBuf, os.SEEK_CUR)
+	rs.Seek(-readBuf, os.SEEK_CUR)
 
-	curOffset, err := parser.rs.Seek(0, os.SEEK_CUR)
+	curOffset, err := rs.Seek(0, os.SEEK_CUR)
 	if err != nil {
 		return 0, err
 	}
 	b2 := make([]byte, readBuf)
-	parser.rs.Read(b2)
+	rs.Read(b2)
 
 	results := repairReXrefTable.FindAllStringIndex(string(b2), -1)
 	if len(results) < 1 {

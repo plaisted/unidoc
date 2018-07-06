@@ -54,7 +54,7 @@ type XrefTable map[int]XrefObject
 type ObjectStream struct {
 	N       int // TODO (v3): Unexport.
 	ds      []byte
-	offsets map[int]osOffsets
+	offsets map[int]*osOffsets
 }
 
 type osOffsets struct {
@@ -76,14 +76,14 @@ func (parser *PdfParser) lookupObjectBytesViaOS(sobjNumber int, objNum int) ([]b
 	var objstm ObjectStream
 	var cached bool
 
-	objstm, cached = parser.objstms[sobjNumber]
+	objstm, cached = parser.fromStreamCache(sobjNumber)
 	if !cached {
 		reader, _, err := parser.lookupReaderByNumber(sobjNumber, false)
 		if err != nil {
 			common.Log.Debug("Missing object stream with number %d", sobjNumber)
 			return nil, err
 		}
-		soi, err := parseObject(reader)
+		soi, err := ParseIndirectObject(reader)
 		if err != nil {
 			common.Log.Debug("Error parsing object stream with number %d", sobjNumber)
 			return nil, err
@@ -127,18 +127,13 @@ func (parser *PdfParser) lookupObjectBytesViaOS(sobjNumber int, objNum int) ([]b
 
 		common.Log.Trace("Decoded: %s", ds)
 
-		// Temporarily change the reader object to this decoded buffer.
-		// Change back afterwards.
-		bakOffset := parser.GetFileOffset()
-		defer func() { parser.SetFileOffset(bakOffset) }()
-
 		bufReader = bytes.NewReader(ds)
 		reader = bufio.NewReader(bufReader)
 
 		common.Log.Trace("Parsing offset map")
 		// Load the offset map (relative to the beginning of the stream...)
-		offsets := map[int]osOffsets{}
-		var lastOffset osOffsets
+		offsets := map[int]*osOffsets{}
+		var lastOffset *osOffsets
 		// Object list and offsets.
 		for i := 0; i < int(*N); i++ {
 			skipSpaces(reader)
@@ -164,19 +159,22 @@ func (parser *PdfParser) lookupObjectBytesViaOS(sobjNumber int, objNum int) ([]b
 			}
 
 			common.Log.Trace("obj %d offset %d", *onum, *offset)
-			thisOffsets := osOffsets{
+			thisOffsets := &osOffsets{
 				Start: int64(*firstOffset + *offset),
 			}
 			offsets[int(*onum)] = thisOffsets
-			if lastOffset.Start != 0 {
+			if lastOffset != nil {
 				lastOffset.End = thisOffsets.Start
 			}
 			lastOffset = thisOffsets
 		}
-		lastOffset.End = int64(len(ds))
+
+		if lastOffset != nil {
+			lastOffset.End = int64(len(ds))
+		}
 
 		objstm = ObjectStream{N: int(*N), ds: ds, offsets: offsets}
-		parser.objstms[sobjNumber] = objstm
+		parser.toStreamCache(sobjNumber, objstm)
 	}
 
 	offsets := objstm.offsets[objNum]
@@ -189,7 +187,7 @@ func (parser *PdfParser) lookupObjectBytesViaOS(sobjNumber int, objNum int) ([]b
 	bb := objstm.ds[:peakEnd]
 	common.Log.Trace("OBJ peek \"%s\"", string(bb))
 
-	return getWrappedOSBytes(objstm.ds, offsets.Start, offsets.End, sobjNumber), nil
+	return getWrappedOSBytes(objstm.ds, offsets.Start, offsets.End, objNum), nil
 }
 
 func getWrappedOSBytes(data []byte, start, end int64, objNo int) []byte {
