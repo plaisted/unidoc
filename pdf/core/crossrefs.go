@@ -446,8 +446,8 @@ func (parser *PdfParser) Trace(obj PdfObject) (PdfObject, error) {
 		return obj, nil
 	}
 
-	bakOffset := parser.GetFileOffset()
-	defer func() { parser.SetFileOffset(bakOffset) }()
+	// bakOffset := parser.GetFileOffset()
+	// defer func() { parser.SetFileOffset(bakOffset) }()
 
 	o, err := parser.LookupByReference(*ref)
 	if err != nil {

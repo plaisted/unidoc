@@ -47,6 +47,7 @@ func BenchmarkParallelLoad1(b *testing.B) { benchmarkParallelLoad(1, b) }
 func BenchmarkParallelLoad2(b *testing.B) { benchmarkParallelLoad(2, b) }
 func BenchmarkParallelLoad4(b *testing.B) { benchmarkParallelLoad(4, b) }
 func BenchmarkParallelLoad8(b *testing.B) { benchmarkParallelLoad(8, b) }
+func BenchmarkParallelLoad40(b *testing.B) { benchmarkParallelLoad(40, b) }
 func benchmarkParallelLoad(workers int, b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		//f, err := os.Open("c:\\test\\scenarios\\3000.pdf")
