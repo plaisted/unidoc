@@ -161,6 +161,7 @@ func (this *Image) ToGoImage() (goimage.Image, error) {
 
 	samples := this.GetSamples()
 	//bytesPerColor := colorComponents * int(this.BitsPerComponent) / 8
+	bm8bit := uint32(256 / this.BitsPerComponent-1)
 	bytesPerColor := this.ColorComponents
 	for i := 0; i+bytesPerColor-1 < len(samples); i += bytesPerColor {
 		var c gocolor.Color
@@ -169,7 +170,7 @@ func (this *Image) ToGoImage() (goimage.Image, error) {
 				val := uint16(samples[i])<<8 | uint16(samples[i+1])
 				c = gocolor.Gray16{val}
 			} else {
-				val := uint8(samples[i] & 0xff)
+				val := uint8(samples[i] * bm8bit)
 				c = gocolor.Gray{val}
 			}
 		} else if this.ColorComponents == 3 {
