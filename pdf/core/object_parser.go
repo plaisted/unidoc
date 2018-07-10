@@ -737,9 +737,9 @@ func ParseIndirectObject(reader *bufio.Reader) (PdfObject, error) {
 					stream = bufstream.Bytes()[0:lastEnd]
 
 					// remove end of line from stream
-					if string(stream[len(stream)-2:]) == "\r\n" {
+					if len(stream) > 1 && string(stream[len(stream)-2:]) == "\r\n" {
 						stream = stream[:len(stream)-2]
-					} else if string(stream[len(stream)-1:]) == "\n" {
+					} else if len(stream) > 0 && string(stream[len(stream)-1:]) == "\n" {
 						stream = stream[:len(stream)-1]
 					}
 
