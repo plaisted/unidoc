@@ -37,16 +37,23 @@ import (
 )
 
 const (
-	StreamEncodingFilterNameFlate     = "FlateDecode"
-	StreamEncodingFilterNameLZW       = "LZWDecode"
-	StreamEncodingFilterNameDCT       = "DCTDecode"
-	StreamEncodingFilterNameRunLength = "RunLengthDecode"
-	StreamEncodingFilterNameASCIIHex  = "ASCIIHexDecode"
-	StreamEncodingFilterNameASCII85   = "ASCII85Decode"
-	StreamEncodingFilterNameCCITTFax  = "CCITTFaxDecode"
-	StreamEncodingFilterNameJBIG2     = "JBIG2Decode"
-	StreamEncodingFilterNameJPX       = "JPXDecode"
-	StreamEncodingFilterNameRaw       = "Raw"
+	StreamEncodingFilterNameFlate         = "FlateDecode"
+	StreamEncodingFilterNameFlateAbbv     = "Fl"
+	StreamEncodingFilterNameLZW           = "LZWDecode"
+	StreamEncodingFilterNameLZWAbbv       = "LZW"
+	StreamEncodingFilterNameDCT           = "DCTDecode"
+	StreamEncodingFilterNameDCTAbbv       = "DCT"
+	StreamEncodingFilterNameRunLength     = "RunLengthDecode"
+	StreamEncodingFilterNameRunLengthAbbv = "RL"
+	StreamEncodingFilterNameASCIIHex      = "ASCIIHexDecode"
+	StreamEncodingFilterNameASCIIHexAbbv  = "AHx"
+	StreamEncodingFilterNameASCII85       = "ASCII85Decode"
+	StreamEncodingFilterNameASCII85Abbv   = "A85"
+	StreamEncodingFilterNameCCITTFax      = "CCITTFaxDecode"
+	StreamEncodingFilterNameCCITTFaxAbbv  = "CCF"
+	StreamEncodingFilterNameJBIG2         = "JBIG2Decode"
+	StreamEncodingFilterNameJPX           = "JPXDecode"
+	StreamEncodingFilterNameRaw           = "Raw"
 )
 
 const (

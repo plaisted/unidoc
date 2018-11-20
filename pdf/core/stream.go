@@ -55,19 +55,19 @@ func NewEncoderFromStream(streamObj *PdfObjectStream) (StreamEncoder, error) {
 		}
 	}
 
-	if *method == StreamEncodingFilterNameFlate {
+	if *method == StreamEncodingFilterNameFlate || *method == StreamEncodingFilterNameFlateAbbv {
 		return newFlateEncoderFromStream(streamObj, nil)
-	} else if *method == StreamEncodingFilterNameLZW {
+	} else if *method == StreamEncodingFilterNameLZW || *method == StreamEncodingFilterNameLZWAbbv {
 		return newLZWEncoderFromStream(streamObj, nil)
-	} else if *method == StreamEncodingFilterNameDCT {
+	} else if *method == StreamEncodingFilterNameDCT || *method == StreamEncodingFilterNameDCTAbbv {
 		return newDCTEncoderFromStream(streamObj, nil)
-	} else if *method == StreamEncodingFilterNameRunLength {
+	} else if *method == StreamEncodingFilterNameRunLength || *method == StreamEncodingFilterNameRunLengthAbbv {
 		return newRunLengthEncoderFromStream(streamObj, nil)
-	} else if *method == StreamEncodingFilterNameASCIIHex {
+	} else if *method == StreamEncodingFilterNameASCIIHex || *method == StreamEncodingFilterNameASCIIHexAbbv {
 		return NewASCIIHexEncoder(), nil
-	} else if *method == StreamEncodingFilterNameASCII85 || *method == "A85" {
+	} else if *method == StreamEncodingFilterNameASCII85 || *method == StreamEncodingFilterNameASCII85Abbv {
 		return NewASCII85Encoder(), nil
-	} else if *method == StreamEncodingFilterNameCCITTFax {
+	} else if *method == StreamEncodingFilterNameCCITTFax || *method == StreamEncodingFilterNameCCITTFaxAbbv {
 		return NewCCITTFaxEncoder(), nil
 	} else if *method == StreamEncodingFilterNameJBIG2 {
 		return NewJBIG2Encoder(), nil
